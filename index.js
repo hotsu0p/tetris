@@ -14,7 +14,7 @@ const blockEmojis = {
 let gameState = {
     tetrominoRow: 0,
     tetrominoCol: 0,
-    board: []
+    board: [],
 };
 
 let gameInterval; // Variable to store the interval for automatic falling
@@ -30,13 +30,13 @@ client.on('messageCreate', async(message) => {
 });
 
 async function startTetrisGame(message) {
-    gameState.board = Array.from({ length: 10 }, () => Array(10).fill('⬛'));
+    gameState.board = Array.from({ length: 20 }, () => Array(10).fill('⬛'));
     gameState.tetrominoCol = Math.floor(gameState.board[0].length / 2) - 2;
     for (let i = 0; i < 4; i++) {
         gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = 'I';
     }
     const renderedBoard = renderBoard(gameState.board);
-    const newMessage = await message.channel.send(`${renderedBoard}\n\nUse the buttons to move the Tetromino!`);
+    const buttonMessage = await message.channel.send(`${renderedBoard}\n\nPress the buttons below to move the Tetromino!`);
 
     // Create buttons
     const buttons = [
@@ -45,9 +45,11 @@ async function startTetrisGame(message) {
         new MessageButton().setCustomId('rotate').setLabel('Rotate').setStyle('DANGER'),
     ];
 
+    // Send the message with the buttons
     const row = new MessageActionRow().addComponents(buttons);
-    await newMessage.edit({ content: 'Use the buttons below to control the Tetromino:', components: [row] });
+    await buttonMessage.edit({ components: [row] });
 
+    // Add your logic to handle the Tetris game and reactions here
     client.on('interactionCreate', async(interaction) => {
         try {
             if (!interaction.isButton()) return;
@@ -57,42 +59,43 @@ async function startTetrisGame(message) {
                 switch (interaction.customId) {
                     case 'left':
                         // Move left
-                        await moveLeft(gameState, newMessage);
+                        await moveLeft(gameState, buttonMessage);
                         break;
                     case 'right':
                         // Move right
-                        await moveRight(gameState, newMessage);
+                        await moveRight(gameState, buttonMessage);
                         break;
                     case 'rotate':
                         // Rotate
-                        rotate(gameState);
+                        rotate(gameState, buttonMessage); // Use buttonMessage instead of newMessage
                         break;
+
                     default:
                         break;
                 }
 
                 // Update the message with the new board state
-                await newMessage.edit(`${renderBoard(gameState.board)}\n\nUse the buttons to move the Tetromino!`);
+                await buttonMessage.edit(`${renderBoard(gameState.board)}\n\nButtons pressed: ${interaction.customId}`);
             }
         } catch (error) {
             console.error('Error handling interaction:', error);
+            // Display an error message in the chat
+            await interaction.reply('An error occurred while processing your request.');
         }
     });
 
     // Start the interval for automatic falling
     gameInterval = setInterval(async() => {
-        await moveDown(gameState, newMessage);
+        await moveDown(gameState, buttonMessage);
     }, 1000);
 
     function renderBoard(board) {
         return board.map((row) => row.map((block) => blockEmojis[block] || block).join(' ')).join('\n');
     }
 
-    async function moveLeft(gameState, newMessage) {
+    async function moveLeft(gameState, buttonMessage) {
         // Clear the current position of the Tetromino
-        for (let i = 0; i < 4; i++) {
-            gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = '⬛';
-        }
+        clearTetromino(gameState);
 
         // Check if the Tetromino can move left
         if (gameState.tetrominoCol > 0 && canMove(gameState, 'left')) {
@@ -101,19 +104,15 @@ async function startTetrisGame(message) {
         }
 
         // Place the Tetromino in its new position
-        for (let i = 0; i < 4; i++) {
-            gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = 'I';
-        }
+        placeTetromino(gameState);
 
         // Update the board
-        await updateBoard(gameState, newMessage);
+        await updateBoard(gameState, buttonMessage);
     }
 
-    async function moveRight(gameState, newMessage) {
+    async function moveRight(gameState, buttonMessage) {
         // Clear the current position of the Tetromino
-        for (let i = 0; i < 4; i++) {
-            gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = '⬛';
-        }
+        clearTetromino(gameState);
 
         // Check if the Tetromino can move right
         if (gameState.tetrominoCol < gameState.board[0].length - 4 && canMove(gameState, 'right')) {
@@ -122,17 +121,15 @@ async function startTetrisGame(message) {
         }
 
         // Place the Tetromino in its new position
-        for (let i = 0; i < 4; i++) {
-            gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = 'I';
-        }
+        placeTetromino(gameState);
 
         // Update the board
-        await updateBoard(gameState, newMessage);
+        await updateBoard(gameState, buttonMessage);
     }
 
-    async function updateBoard(gameState, newMessage) {
+    async function updateBoard(gameState, buttonMessage) {
         // Update the message with the new board state
-        await newMessage.edit(`${renderBoard(gameState.board)}\n\nUse the buttons to move the Tetromino!`);
+        await buttonMessage.edit(`${renderBoard(gameState.board)}\n\nButtons pressed:`);
     }
 
     function canMove(gameState, direction) {
@@ -141,7 +138,7 @@ async function startTetrisGame(message) {
         return true;
     }
 
-    async function moveDown(gameState, newMessage) {
+    async function moveDown(gameState, buttonMessage) {
         // Clear the current position of the Tetromino
         for (let i = 0; i < 4; i++) {
             gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = '⬛';
@@ -162,29 +159,21 @@ async function startTetrisGame(message) {
                 gameState.tetrominoRow += 1; // Move down
             } else {
                 // Stop the game if it cannot move down further
-                clearInterval(gameInterval);
+                clearInterval(gameState.tetrominoInterval);
                 // Send a message indicating that the game is over
-                await newMessage.channel.send('Game Over!');
+                await buttonMessage.channel.send('Game Over!');
 
                 // Reset the game state
-                gameState = {
-                    tetrominoRow: 0,
-                    tetrominoCol: 0,
-                    board: [],
-                };
+                resetGameState();
             }
         } else {
             // If the Tetromino is already at the bottom, stop the game
-            clearInterval(gameInterval);
+            clearInterval(gameState.tetrominoInterval);
             // Send a message indicating that the game is over
-            await newMessage.channel.send('Game Over!');
+            await buttonMessage.channel.send('Game Over!');
 
             // Reset the game state
-            gameState = {
-                tetrominoRow: 0,
-                tetrominoCol: 0,
-                board: [],
-            };
+            resetGameState();
         }
 
         // Place the Tetromino in its new position
@@ -193,13 +182,93 @@ async function startTetrisGame(message) {
         }
 
         // Update the board
-        await updateBoard(gameState, newMessage);
+        await updateBoard(gameState, buttonMessage);
     }
 
     function rotate(gameState) {
-        // This is a bit more complex and depends on the shape of the Tetromino
-        // ill do this later
+        // Clone the Tetromino's current state
+        const currentTetromino = gameState.board.map(row => row.slice(gameState.tetrominoCol, gameState.tetrominoCol + 4));
+
+        // Clear the current position of the Tetromino
+        clearTetromino(gameState);
+
+        // Rotate the Tetromino (simple rotation for 'I' block)
+        const rotatedTetromino = rotateMatrix(currentTetromino);
+
+        // Check if the rotated Tetromino can fit in the new position
+        if (canPlaceTetromino(gameState, rotatedTetromino)) {
+            // Update the Tetromino's position and state
+            gameState.board.forEach((row, rowIndex) => {
+                row.splice(gameState.tetrominoCol, 4, ...rotatedTetromino[rowIndex]);
+            });
+        }
+
+        // Place the Tetromino in its new position
+        placeTetromino(gameState);
+
+        // Update the board
+        updateBoard(gameState);
+    }
+
+
+    function rotateMatrix(matrix) {
+        // Transpose the matrix
+        const transposed = matrix[0].map((col, i) => matrix.map(row => row[i]));
+
+        // Reverse each row to rotate clockwise
+        const rotated = transposed.map(row => row.reverse());
+
+        return rotated;
+    }
+
+
+    function canPlaceTetromino(gameState, tetromino) {
+        // Check if the Tetromino can be placed in the new position
+        for (let row = 0; row < tetromino.length; row++) {
+            for (let col = 0; col < tetromino[row].length; col++) {
+                if (
+                    tetromino[row][col] !== '⬛' &&
+                    (gameState.board[gameState.tetrominoRow + row] === undefined ||
+                        gameState.board[gameState.tetrominoRow + row][gameState.tetrominoCol + col] !== '⬛')
+                ) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    function clearTetromino(gameState) {
+        // Clear the current position of the Tetromino
+        for (let i = 0; i < 4; i++) {
+            if (gameState.board[gameState.tetrominoRow] && gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i]) {
+                gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = '⬛';
+            }
+        }
+    }
+
+    function placeTetromino(gameState) {
+        // Place the Tetromino in its new position
+        for (let i = 0; i < 4; i++) {
+            if (gameState.board[gameState.tetrominoRow] && gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i]) {
+                gameState.board[gameState.tetrominoRow][gameState.tetrominoCol + i] = 'I';
+            }
+        }
+    }
+
+    function resetGameState() {
+        // Reset the game state
+        gameState = {
+            tetrominoRow: 0,
+            tetrominoCol: 0,
+            board: [],
+        };
+
+        // Restart the game interval
+        gameInterval = setInterval(async() => {
+            await moveDown(gameState, buttonMessage);
+        }, 1000);
     }
 }
 
-client.login('MTIwMDkzODgzNDc1NDU1NjAxNg.GjAt1F.cQLVKA5fwVfgWJGTDnHCxm25OvGEAbr9XtzMzs');
+client.login('');

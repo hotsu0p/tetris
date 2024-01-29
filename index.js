@@ -1,5 +1,5 @@
 const { Client, Intents, MessageActionRow, MessageButton } = require('discord.js');
-
+const { debounce } = require('lodash'); // Import debounce function for button handling
 const client = new Client({
     intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS]
 });
@@ -74,6 +74,7 @@ async function startTetrisGame(message) {
         new MessageButton().setCustomId('left').setLabel('Move Left').setStyle('PRIMARY'),
         new MessageButton().setCustomId('right').setLabel('Move Right').setStyle('SECONDARY'),
         new MessageButton().setCustomId('rotate').setLabel('Rotate').setStyle('DANGER'),
+        new MessageButton().setCustomId('harddrop').setLabel('Hard Drop').setStyle('SUCCESS'), // Added hard drop button
     ];
 
     // Send the message with the buttons
@@ -85,29 +86,32 @@ async function startTetrisGame(message) {
         try {
             if (!interaction.isButton()) return;
 
-            console.log(`Clicked ${interaction.customId} from ${interaction.user.username}`);
-            if (interaction.user.id === message.author.id) {
-                switch (interaction.customId) {
-                    case 'left':
-                        // Move left
-                        await moveLeft(gameState, buttonMessage);
-                        break;
-                    case 'right':
-                        // Move right
-                        await moveRight(gameState, buttonMessage);
-                        break;
-                    case 'rotate':
-                        // Rotate
-                        await rotate(gameState, buttonMessage);
-                        break;
-
-                    default:
-                        break;
+            // Debounce button interactions to avoid excessive calls (adjust delay as needed)
+            const debouncedHandleInteraction = debounce(async() => {
+                console.log(`Clicked ${interaction.customId} from ${interaction.user.username}`);
+                if (interaction.user.id === message.author.id) {
+                    switch (interaction.customId) {
+                        case 'left':
+                            await moveLeft(gameState, buttonMessage);
+                            break;
+                        case 'right':
+                            await moveRight(gameState, buttonMessage);
+                            break;
+                        case 'rotate':
+                            await rotate(gameState, buttonMessage);
+                            break;
+                        case 'harddrop':
+                            await hardDrop(gameState, buttonMessage); // New hard drop function
+                            break;
+                        default:
+                            break;
+                    }
+                    message.channel.send(`Drawing at position: x=${myGamePiece.x}, y=${myGamePiece.y}`);
+                    await buttonMessage.edit(`${renderBoard(gameState.board)}\n\nButtons pressed: ${interaction.customId}`);
                 }
+            }, 100); // Debounce delay of 100ms
 
-                // Update the message with the new board state
-                await buttonMessage.edit(`${renderBoard(gameState.board)}\n\nButtons pressed: ${interaction.customId}`);
-            }
+            debouncedHandleInteraction();
         } catch (error) {
             console.error('Error handling interaction:', error);
             // Display an error message in the chat
@@ -124,7 +128,48 @@ async function startTetrisGame(message) {
 function generateRandomTetromino() {
     return tetrominos[Math.floor(Math.random() * tetrominos.length)];
 }
+async function hardDrop(gameState, buttonMessage) {
+    clearInterval(gameInterval); // Stop automatic falling
 
+    // Target column for the "I" tetromino (adjust as needed)
+    const targetCol = 4;
+
+    // Iterate through potential drop positions starting from the current row
+    for (let row = gameState.tetrominoRow; row < gameState.board.length; row++) {
+        // Check if the tetromino can be placed directly below column targetCol
+        if (canMove(gameState, 'down', row, targetCol)) {
+            gameState.tetrominoRow = row;
+            break; // Exit the loop if a valid position is found
+        }
+    }
+
+    // Merge, send new tetromino, clear rows, etc.
+    mergeTetrominoIntoBoard(gameState);
+    sendNewTetromino(gameState);
+    clearCompleteRows(gameState, buttonMessage);
+
+    gameInterval = setInterval(async() => {
+        await moveDown(gameState, buttonMessage);
+    }, 1000); // Restart automatic falling
+}
+
+// New function to calculate the lowest possible row
+function getLowestPossibleRow(gameState) {
+    let lowestRow = gameState.tetrominoRow;
+
+    // Loop through each row down from the current position
+    for (let row = lowestRow + 1; row < gameState.board.length; row++) {
+        // Check if the tetromino can move down to this row without collision
+        if (canMove(gameState, 'down', row)) {
+            lowestRow = row;
+        } else {
+            // Break out of the loop if a collision is detected, stopping at the last valid row
+            break;
+        }
+    }
+
+    return lowestRow;
+}
 async function moveDown(gameState, buttonMessage) {
     // Move down the Tetromino
     clearTetromino(gameState);
@@ -311,4 +356,4 @@ async function updateBoard(gameState, buttonMessage) {
     // Update the message with the new board state
     await buttonMessage.edit(`${renderBoard(gameState.board)}\n\nButtons pressed:`);
 }
-client.login('MTIwMDkzODgzNDc1NDU1NjAxNg.G9Lbad.3j2F6Dzl7NNk3lAyawhWTYAGcj_YC57Im2oj7I');
+client.login('MTIwMDkzODgzNDc1NDU1NjAxNg.Gjb8F3.WZy8u0oX88437UJ74srUC9uoz6pwa9ZsJChNvk');

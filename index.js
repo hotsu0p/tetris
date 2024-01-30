@@ -313,9 +313,7 @@ async function startTetrisGame(message) {
         if (canPlaceTetromino(rotatedTetromino)) {
             return rotatedTetromino;
         } else {
-            // Optionally implement wall kick algorithm to attempt adjustments
-            // ... (if desired)
-            return null; // Rotation failed due to collision
+            return null; 
         }
     }
 
@@ -380,8 +378,7 @@ async function startTetrisGame(message) {
     }
 
     function deactivateTetromino(gameState) {
-        // Deactivate the current Tetromino
-        // You can add further logic here if needed
+    
     }
 
     function canPlaceTetromino(gameState, tetromino) {
@@ -435,4 +432,4 @@ async function startTetrisGame(message) {
         await buttonMessage.edit(`${renderBoard(gameState.board)}\n\nButtons pressed:`);
     }
 }
-client.login('MTIwMDkzODgzNDc1NDU1NjAxNg.G_gjgw.b1bkYb4d797KU8CxD4QkcRFlNBKfSZHnM0jZFY');
+client.login('');
